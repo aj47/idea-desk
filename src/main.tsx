@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ArrowUpRight, Check, CircleUserRound, Lightbulb, LogOut, Plus, Search, Sparkles, X } from "lucide-react";
 import { authenticate, loadIdeas, saveIdea } from "./github";
+import { hermesSession, loadHermesIdeas, saveHermesIdea } from "./hermes";
 import type { Idea, Status } from "./types";
 import "./styles.css";
 
@@ -39,6 +40,7 @@ function App() {
   const [editing, setEditing] = useState<Idea | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [authMode, setAuthMode] = useState<"loading" | "hermes" | "github">("loading");
 
   async function signIn(value = draftToken) {
     setBusy(true); setError("");
@@ -51,7 +53,19 @@ function App() {
     finally { setBusy(false); }
   }
 
-  React.useEffect(() => { if (token && !user) void signIn(token); }, []);
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const account = await hermesSession();
+        const records = await loadHermesIdeas();
+        setUser({ login: account.name || account.login, avatar_url: account.avatar_url });
+        setIdeas(records); setAuthMode("hermes");
+      } catch {
+        setAuthMode("github");
+        if (token) void signIn(token);
+      }
+    })();
+  }, []);
 
   const visible = useMemo(() => ideas.filter((idea) => {
     const text = `${idea.title} ${idea.premise} ${idea.hook ?? ""} ${idea.tags.join(" ")}`.toLowerCase();
@@ -66,10 +80,12 @@ function App() {
       const now = new Date().toISOString();
       const isNew = !editing.idea_id;
       const finalIdea = { ...editing, idea_id: isNew ? `${now.slice(0, 10)}-${slug(editing.title)}-${now.slice(11, 19).replace(/:/g, "")}` : editing.idea_id, created_at: editing.created_at || now, updated_at: now };
-      const next = await saveIdea(token, finalIdea, ideas); setIdeas(next); setEditing(null); setActive(finalIdea.status);
+      const next = authMode === "hermes" ? await saveHermesIdea(finalIdea) : await saveIdea(token, finalIdea, ideas); setIdeas(next); setEditing(null); setActive(finalIdea.status);
     } catch (err) { setError(err instanceof Error ? err.message : "Save failed"); }
     finally { setBusy(false); }
   }
+
+  if (authMode === "loading") return <main className="gate"><section className="gate-card"><span className="eyebrow">VERIFYING TAILNET</span><h1>Opening<br/><em>Idea Desk…</em></h1></section></main>;
 
   if (!user) return <main className="gate">
     <section className="gate-card">
@@ -89,7 +105,7 @@ function App() {
     <aside>
       <div className="brand"><Lightbulb/><span>IDEA<br/>DESK</span></div>
       <nav>{statuses.map((status) => <button className={active === status.value ? "active" : ""} onClick={() => setActive(status.value)} key={status.value}><span>{status.label}</span><b>{ideas.filter((idea) => idea.status === status.value).length}</b></button>)}</nav>
-      <div className="account"><img src={user.avatar_url}/><div><strong>@{user.login}</strong><span>private repository</span></div><button title="Sign out" onClick={() => { localStorage.removeItem("github-token"); location.reload(); }}><LogOut size={16}/></button></div>
+      <div className="account">{user.avatar_url ? <img src={user.avatar_url}/> : <CircleUserRound/>}<div><strong>{authMode === "hermes" ? user.login : `@${user.login}`}</strong><span>{authMode === "hermes" ? "Tailscale verified" : "private repository"}</span></div>{authMode === "github" && <button title="Sign out" onClick={() => { localStorage.removeItem("github-token"); location.reload(); }}><LogOut size={16}/></button>}</div>
     </aside>
     <main className="workspace">
       <header><div><span className="eyebrow">SHARED CREATIVE SYSTEM</span><h1>{statuses.find((s) => s.value === active)?.label}</h1></div><button className="primary" onClick={() => setEditing(emptyIdea())}><Plus size={17}/> Capture idea</button></header>
