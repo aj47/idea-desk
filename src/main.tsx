@@ -30,7 +30,7 @@ function slug(value: string) {
 }
 
 function App() {
-  const [token, setToken] = useState(sessionStorage.getItem("github-token") ?? "");
+  const [token, setToken] = useState(localStorage.getItem("github-token") ?? "");
   const [draftToken, setDraftToken] = useState("");
   const [user, setUser] = useState<{ login: string; avatar_url: string } | null>(null);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -46,7 +46,7 @@ function App() {
       const account = await authenticate(value.trim());
       if (account.login.toLowerCase() !== "aj47") throw new Error("This desk is restricted to the aj47 GitHub account.");
       const records = await loadIdeas(value.trim());
-      sessionStorage.setItem("github-token", value.trim()); setToken(value.trim()); setUser(account); setIdeas(records);
+      localStorage.setItem("github-token", value.trim()); setToken(value.trim()); setUser(account); setIdeas(records);
     } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); }
     finally { setBusy(false); }
   }
@@ -80,7 +80,7 @@ function App() {
       <input type="password" value={draftToken} onChange={(e) => setDraftToken(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void signIn()} placeholder="github_pat_…" autoComplete="off"/>
       <button className="primary" onClick={() => void signIn()} disabled={busy || !draftToken}>{busy ? "Checking access…" : "Open idea desk"}<ArrowUpRight size={17}/></button>
       <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Create a token limited to shared-agents <ArrowUpRight size={13}/></a>
-      <small>Required permission: Contents — read and write. Stored only in this tab session.</small>
+      <small>Required permission: Contents — read and write. Stored in this Chrome profile until you sign out.</small>
       {error && <div className="error">{error}</div>}
     </section>
   </main>;
@@ -89,7 +89,7 @@ function App() {
     <aside>
       <div className="brand"><Lightbulb/><span>IDEA<br/>DESK</span></div>
       <nav>{statuses.map((status) => <button className={active === status.value ? "active" : ""} onClick={() => setActive(status.value)} key={status.value}><span>{status.label}</span><b>{ideas.filter((idea) => idea.status === status.value).length}</b></button>)}</nav>
-      <div className="account"><img src={user.avatar_url}/><div><strong>@{user.login}</strong><span>private repository</span></div><button title="Sign out" onClick={() => { sessionStorage.clear(); location.reload(); }}><LogOut size={16}/></button></div>
+      <div className="account"><img src={user.avatar_url}/><div><strong>@{user.login}</strong><span>private repository</span></div><button title="Sign out" onClick={() => { localStorage.removeItem("github-token"); location.reload(); }}><LogOut size={16}/></button></div>
     </aside>
     <main className="workspace">
       <header><div><span className="eyebrow">SHARED CREATIVE SYSTEM</span><h1>{statuses.find((s) => s.value === active)?.label}</h1></div><button className="primary" onClick={() => setEditing(emptyIdea())}><Plus size={17}/> Capture idea</button></header>
